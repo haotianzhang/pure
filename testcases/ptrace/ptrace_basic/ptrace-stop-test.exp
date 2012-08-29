@@ -1,0 +1,33 @@
+#!/usr/bin/expect
+
+if { $argc < 1 } {
+   puts stderr "Usage: ./ptrace-stop-test.exp test-stop.sh\n "
+   exit 1
+}
+
+set timeout 30
+
+set test_name [lindex $argv 0]
+
+spawn ./${test_name}
+
+expect {
+	timeout { puts stderr "Test failed! Cannot stop the traced process.\n"; exit 1}
+	"*continue:"
+	}
+
+expect {
+	"Press <enter> to continue:"  { send "\n" }
+	timeout { puts stdout "Test pass.\n"; exit 0}
+	}
+
+expect {
+	"*My counter*" { puts stderr "Test failed! Cannot stop the traced process.\n"; exit 1 }
+	timeout       { send "\n" } 
+	}
+
+expect {
+	"*My counter*" { exit 0 }
+	timeout       { puts stderr "Test failed! Cannot continue the stopped process.\n"; exit 1 }
+	}
+

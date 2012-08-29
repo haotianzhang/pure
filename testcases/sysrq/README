@@ -1,0 +1,37 @@
+1. Reference 
+linux/Documentation/sysrq.txt
+2. Case strategy
+
+ Summary:
+ =================================================
+ 1. Smart way test : (must be run)
+    ---------
+    echo 'm' > /proc/sysrq-trigger
+    ---------
+ 2. Test via serial console : (select to run)
+    Check "console=ttyS0,115200" adding in cmdline. 
+  A.For minicom, connect via serial port directly.(manual)
+    The command sequence: 'ctrl+a f' will initiate a break sequence.  
+    ---------
+    ctrl+a f
+    m
+    ---------
+  B.For telnet, connect via terminal server.
+    This test can detect "WIND00192574 Fail to use SysRq over a serial console".
+    ---------
+    ctrl+]
+    telnet> send brk
+    m
+    ---------
+ 3. Keyboard+screen console: (select to run)
+    The board on desk, test it using this way.
+    For this case, should redo dotest2 manually,
+      'echo 0\1 > /proc/sys/kernel/sysrq/' enable or disable sysrq, 
+      check it function by press key combo
+    Press the key combo 'ALT-SysRq-<command key>'
+    ---------
+    ALT-SysRq-m
+    ---------
+ Logs show:
+    SysRq : Show Memory
+

@@ -1,0 +1,12 @@
+The mutex_lock testcase is based on the WIND00279094. 
+When using the mutex lock in the preempt_rt, the load of cpu will go up from 60% to 100%
+
+
+
+Test steps
+1. Run the mutex_lock1 and mutex_lock2 in the background.
+2. wait for 2 minutes.
+3. check if the CPU usage is go up to near 80%.
+4. if usage is bigger than 80%, exit with 1, otherwise exit with 0.
+
+

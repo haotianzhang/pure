@@ -1,0 +1,18 @@
+root@si:/root> mdkir /blah
+-bash: mdkir: command not found
+root@si:/root> mkdir /Fruits
+root@si:/root> mkdir /Vegatables
+root@si:/root> touch /Fruits/Apple
+root@si:/root> touch /Fruits/Tomato
+root@si:/root> touch /Vegatables/Carrots
+root@si:/root> touch /Vegatables/Tomato 
+root@si:/root> echo "I am botanically a fruit" > /Fruits/Tomato
+root@si:/root> echo "I am horticulturally a veggie" >  /Vegatables/Tomato 
+root@si:/root> mkdir /mnt/healthy
+root@si:/root> mount -t unionfs -o dirs=/Fruits:/Vegatables \
+ none /mnt/healthy 
+root@si:/root> ls /mnt/healthy/
+Apple  Carrots  Tomato
+root@si:/root> 
+
+

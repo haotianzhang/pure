@@ -1,0 +1,18 @@
+ptrace_signal testcase is based on the defect WIND00291859. In the WIND00291859, process gets signal with wrong sequence.
+
+
+
+Target process will fork a child process, this child process will set two signal actions (SIGSTOP and  SIGTRAP), then go to sleep forever.
+
+ptrace_sig process will do the follow steps :
+1. Attach the child target process. 
+2. Wait the child target process stopped. When the child target process stopped, get the signal number.
+3. Call the ptrace with PTRACE_SYSCALL argument, the ptrace function will restart the child target process.
+4. Wait the child target process stopped.  When the child target process stopped, get the signal number.
+5. Detach the child target process.
+
+
+The child target process should accept a SIGSTOP and a SIGTRAP signal. repeat "loop" times
+The runtest.sh will check the sequence of signals that child target process accepted.
+If it gets wrong sequence signals, it will exit with 1. otherwise exit with 0
+

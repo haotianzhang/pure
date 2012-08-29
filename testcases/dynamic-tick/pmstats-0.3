@@ -1,0 +1,135 @@
+#!/usr/bin/perl
+
+my $battery = "/proc/acpi/battery/BAT0/state";
+my $timer = "/proc/interrupts";
+
+my $batt_warn = 1;
+
+my $pm = {
+    mamps	=> 0,
+    volts	=> 0,
+    capacity	=> 0,
+    mwatts	=> 0,
+    time_left	=> 0,
+    ticks	=> 0,
+    last_ticks	=> 0,
+};
+
+sub get_battery_status() {
+	my $buf = "";
+	unless (open(IN, "<$battery")){
+	    if ($batt_warn){
+		print STDERR "Could not read battery: $!\n";
+		$batt_warn = 0;
+	    }
+	    return;
+	}
+	read(IN, $buf, 256);
+	#printf("Buf: %s\n", $buf);
+	close(IN);
+	my @rows = split("\n", $buf);
+	foreach my $row (@rows) {
+		$row =~ s/ +/ /g;
+		my ($tag, $val) = split(": ", $row);
+		#printf("%s =  %s\n", $tag, $val);
+		if ($tag eq "present rate") {
+			($pm->{mamps}) = split(" mA", $val);
+			next;
+		}
+		if ($tag eq "remaining capacity") {
+			($pm->{capacity}) = split(" mAh", $val);
+			next;
+		}
+		if ($tag eq "present voltage") {
+			($pm->{volts}) = split(" mV", $val);
+			next;
+		}
+
+	}
+
+	$pm->{mwatts} = $pm->{mamps} * $pm->{volts};
+	if ($pm->{mamps} > 0) {
+		$pm->{time_left} = ($pm->{capacity} * 60 ) / $pm->{mamps};
+	}
+	#printf("mamps: %i volts: %i capacity: %i mwats: %i time_left: %i\n",
+	#       $pm->{mamps}, $pm->{volts}, $pm->{capacity}, $pm->{mwatts}, $pm->{time_left});
+}
+
+sub read_timer_ticks() {
+	my $buf = "";
+	open(IN, "<$timer") or die "Could not open timer: $!";
+	read(IN, $buf, 128);
+	close(IN);
+	my @rows = split("\n", $buf);
+	foreach my $row (@rows) {
+		$row =~ s/ +/ /g;
+		my ($tag, $val) = split(": ", $row);
+		$tag =~ s/ +//g;
+		#printf("%s =  %s\n", $tag, $val);
+		($val) = split(" ", $val);
+		if ($tag eq "0") {
+			return($val);
+		}
+	}
+	return 0;
+}
+
+my ($params) = @ARGV;
+
+if ($params eq "") {
+	print("Using default interval of 3 seconds\n");
+	$rate = 3;
+} elsif ($params eq "--help") {
+	printf("Usage: %s [frequency]\n\n", $0);
+	print("Where frequency can be optionally specified in seconds\n");
+	exit(0);
+}
+
+my $mamps_sum = 0;
+my $mamps_count = 0;
+
+sub end_up {
+    if ($mamps_sum > 0 && $mamps_count > 0){
+	printf("Average current the last %d seconds: %imA\n",
+	       $mamps_count*$rate, $mamps_sum/$mamps_count);
+	exit(0);
+    }
+    else{
+	print STDERR "Could not determine Amperes of battery\n" if $batt_warn;
+	exit(0);
+    }
+}
+
+$SIG{TERM} = 'end_up';
+$SIG{INT} = 'end_up';
+$SIG{QUIT} = 'end_up';
+
+my $last_ticks = 0;
+
+while (1) {
+	get_battery_status();
+	$pm->{ticks} = read_timer_ticks();
+	my $delta_ticks = ($pm->{ticks} - $pm->{last_ticks}) / $rate;
+	if ($pm->{last_ticks} == 0) {
+		$delta_ticks = 0; 
+	}
+	$pm->{last_ticks} = $pm->{ticks};
+
+	my $hours = $pm->{time_left} / 60;
+	my $mins = $pm->{time_left} % 60;
+
+	printf("Current: %imA Voltage: %.2fV Power: %.2fW %imAh ".
+	       "Time: %02i:%02ih Ticks: %iHZ\n",
+	       $pm->{mamps},
+	       $pm->{volts} / 1000,
+	       $pm->{mwatts} / 1000000,
+	       $pm->{capacity},
+	       $hours,
+	       $mins,
+	       $delta_ticks);
+	$mamps_sum += $pm->{mamps};
+	$mamps_count++;
+	sleep $rate;
+}
+
+

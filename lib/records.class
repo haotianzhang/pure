@@ -1,0 +1,116 @@
+#! /bin/bash
+#
+# Definition of class run_test for the multi special test cases in pure
+#
+# Copyright (c) 2008-2012, WindRiver CDC Linux Testing Team
+#
+# <zhengwang.ruan@windriver.com>
+#
+# Version 1.0 
+#
+
+DEFSIG=[RECSIGS]
+
+class RECORDS
+	func RECORDS
+	func checkSig
+	func addRecord
+	func removeRecord
+	func readRecord
+	func updateRecord
+	func findRecord
+	func refreshRecords
+	
+	var recFile
+	var recTmpFile
+		
+
+
+
+RECORDS::RECORDS () 
+{ 
+	recFile=$1
+# Do not flush the existing records.
+	[ ! -e $recFile ] && { echo $DEFSIG > $recFile; }	
+	recTmpFile=.temp_$recFile
+}
+
+RECORDS::checkSig ()
+{
+	if [ ! -e $recFile ]; then
+		return
+	fi
+	
+	local sig=`sed -n "1p" $recFile`
+	
+	if [ "$sig" != "$DEFSIG" ]; then
+		return
+	fi
+	
+	echo -e "ok"
+}
+
+RECORDS::addRecord ()
+{
+	local sigOk=`checkSig`
+	[ -z "$sigOk" ] && { echo -e "check records sig error."; return;}
+
+	local rec="$1	$1_$2"
+	echo $rec >> $recFile	
+	
+	return 0
+}
+
+RECORDS::removeRecord ()
+{
+	local sigOk=`checkSig`
+	[ -z "$sigOk" ] && { echo -e "check records sig error."; return;}
+	
+	local tok=$1
+	sed -e "/$tok/d" $recFile > $recTmpFile
+	cp $recTmpFile $recFile
+
+	return 0
+}
+
+RECORDS::readRecord ()
+{
+	local sigOk=`checkSig`
+	[ -z "$sigOk" ] && { echo -e "check records sig error."; return;}
+		
+	local tok=$1
+	local rec=`sed -n "/$tok/p" $recFile`
+	
+	echo -e $rec
+}
+
+RECORDS::updateRecord ()
+{
+	local sigOk=`checkSig`
+	[ -z "$sigOk" ] && { echo -e "check records sig error."; return;}
+		
+	local tok=$1
+	local rec="$1_$2"
+	local recStat=`sed -n "/$tok/p" $recFile | awk '{print $2}'`
+	
+	sed -e "s/$recStat/$rec/" $recFile > $recTmpFile
+	cp $recTmpFile $recFile
+
+	return 0
+}
+
+RECORDS::findRecord ()
+{
+	local sigOk=`checkSig`
+	[ -z "$sigOk" ] && { echo -e "check records sig error."; return;}
+		
+	local rec=$1
+	local got=`sed -n "/$rec/p" $recFile`
+	
+	echo -e $got
+}
+
+RECORDS::refreshRecords ()
+{
+	[ ! -z $recFile ] && { echo $DEFSIG > $recFile; }
+}

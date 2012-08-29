@@ -1,0 +1,15 @@
+Kernel Feature Testing Package v3.0
+
+2011-03-02 Haotian Zhang
+--------------------
+o	Uprev to the 3.0 version for wrlinux 4.2 on 2.6.34 kernel
+
+2010-05-21 Haotian Zhang <haotian.zhang@windriver.com>
+--------------------
+o	The architecture on kftp 2.0 has been reconstructed.
+o	Testcases have been reorganized into categories in a directory
+	structure under the testcase subdirectory.
+--------------------
+
+
+

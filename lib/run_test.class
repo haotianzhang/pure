@@ -1,0 +1,157 @@
+
+source lib/class.sh
+source lib/function.sh
+
+# class definition
+class RUN_TEST 
+	func RUN_TEST
+	func initSETUP
+	func setName
+	func setRST
+	func getRST
+	func probeCFG
+	func gotoDIR
+	func backtoDIR
+	func startTEST
+	func checkRST
+	func reportRST
+	func showNAME
+	func setTYPE
+	func showTYPE
+	func setTIMEOUT
+	func showTIMEOUT
+	func getTESTRST
+	func setTESTAUTO
+	func getTESTAUTO
+	
+	var TESTname
+	var TESTquality
+	var TESTlogfile
+	var TESTrst
+	var TESTtype
+	var TESTtimeout
+	var TESTauto
+
+# class implementation
+
+DEFtimout=6000
+
+RUN_TEST::RUN_TEST()
+{
+        setName "$1"
+        setRST
+        if [ -z "$TESTname" ]; then setName "Generic"; fi
+        if [ -e "testcases/$TESTname/$TESTname.inc" ]; then
+                setTYPE `head -n 1 "testcases/$TESTname/$TESTname.inc"`
+                setTIMEOUT `grep TIMEOUT "testcases/$TESTname/$TESTname.inc" | awk -F"=" '{print $2}'`
+                if [ -z $TESTtimeout ]; then
+                        TESTtimeout=$DEFtimout;
+                fi
+	else 
+		setTYPE "Generic_Test"
+	fi
+	
+        echo "$TESTtimeout" | awk '{
+                if ($0 ~ /^[0-9]+$/){
+                        #"Number "
+                        print "skip=0" 
+                } else if ($0 ~ /^[A-Za-z]+$/){
+                        #"String "
+                        print "skip=1"
+                } else {
+                        # "Mixed number and string or others"
+                        print "skip=1"
+                }
+        }' | grep "skip=1" -q
+
+        [ $? -eq 0 ] && {
+                TESTtimeout=$DEFtimout;
+        }
+	
+	setTESTAUTO
+}
+
+RUN_TEST::setName() { TESTname="$1"; }
+RUN_TEST::setTYPE() { TESTtype="$1"; }
+RUN_TEST::setTIMEOUT() { TESTtimeout="$1"; }
+RUN_TEST::showTYPE() { echo "$TESTtype"; }
+RUN_TEST::showTIMEOUT() { echo "$TESTtimeout"; }
+RUN_TEST::setRST() { TESTrst=$TEST_RETVAL_PASS; }
+RUN_TEST::getRST() { TESTrst="$1"; }
+RUN_TEST::showName() { echo "$TESTname ($TESTquality)"; }
+RUN_TEST::initSETUP() { 
+	TESTlogfile="$TESTname.log" 
+	[ -e "$TESTlogfile" ] && rm $TESTlogfile; 
+	
+}
+
+RUN_TEST::gotoDIR() { cd "testcases/$TESTname"; }
+RUN_TEST::backtoDIR() { cd "$1"; }
+RUN_TEST::probeCFG() { 
+	#fragment_file=$(tr '[A-Z]' '[a-z]' <<<$TESTname)
+	fragment_file=$TESTname
+# If the kernel config segment of a feature doesn't match config,skip that feature
+# Assume that if "Feature" has a ".cfg" file in template,the name is "feature.cfg" (.e.g Cgroup has cgroup.cfg )
+
+	[ -r "$fragment_file.cfg" ] && {
+	echo "$fragment_file.cfg readable!" >$TESTlogfile
+	if [ ! -r ~/config ]; then
+		[ -r /proc/config.gz ] && cp /proc/config.gz ~/ && gunzip ~/config.gz ;
+	fi
+	while read line ; do
+		if [[ $line =~ ^"CONFIG_".*"="[my] ]]; then
+			grep -q -E "$line" ~/config || TESTrst=$TEST_RETVAL_SKIP
+		elif [[ $line =~ ^"# CONFIG_".*" is not set" ]]; then
+			grep -q -E "$(sed -r 's/.*# +//;s/ +is not set/=\[my\]/' <<<$line)" ~/config && TESTrst=$TEST_RETVAL_SKIP
+		fi
+	done <$fragment_file.cfg
+
+	} || {
+	echo "Not found the kernel fragment for testing $TESTname, Continue test." >$TESTlogfile
+	}
+}
+RUN_TEST::startTEST()
+{
+	gotoDIR 
+	initSETUP
+	probeCFG
+	
+	[ "$TESTauto" = "0" ] && {
+		TESTrst=$TEST_RETVAL_MANUAL
+		return
+	}
+			
+	[ "$TESTrst" -eq 0 ] && {
+	#./runtest.sh |tee -a $TESTlogfile 2>&1 ;
+	./runtest.sh "$1" >>$TESTlogfile 2>&1
+	TESTrst="$?";
+	}
+	backtoDIR ../../
+}
+RUN_TEST::checkRST() 
+{
+	echo  -e -n "\t[$TESTname] results:"
+	case $TESTrst in
+		$TEST_RETVAL_PASS)  pass ;;
+		$TEST_RETVAL_FAIL)  fail ;;
+		$TEST_RETVAL_SKIP) skip ;;
+		$TEST_RETVAL_MANUAL) manual ;;
+		*)  exception $TESTname;; #timeout ;;
+	esac
+	[ -e $TESTname.kill ] && rm $TESTname.kill
+}
+RUN_TEST::reportRST() { echo "report results"; }
+RUN_TEST::getTESTRST() { echo -e $TESTrst; }
+
+RUN_TEST::setTESTAUTO()
+{ 
+	TESTauto=1
+	if [ -e "testcases/$TESTname/$TESTname.inc" ]; then
+		local auto=`cat "testcases/$TESTname/$TESTname.inc" | sed  "s/=/ /" | awk '/AUTO/ {print $2}'`
+		[ "$auto" = "manual" ] && { TESTauto=0; }
+	fi 
+}
+
+RUN_TEST::getTESTAUTO() { echo -e $TESTauto; }
+
+

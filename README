@@ -1,0 +1,427 @@
+===============================================
+The pure 1.0, how to test the Linux Operating 
+System (Kernel/BSP) based on the Yocto project.
+===============================================
+
+Table of Contents
+-----------------
+1, Introduction
+    1.1 Purpose of this document
+    1.2 Feedback and corrections
+
+2, The overview of contents
+    2.1 Overview
+    2.2 Git Repository
+    2.3 Configuration on the pure
+    2.4 Directory structure
+    2.5 Pure 1.0 Project Layout
+
+3, Developing new testcases 
+    3.1 Beginning introduce
+        3.1.1 The test harness APIs
+        3.1.2 APIs descriptions
+    3.2 New case design
+        3.2.1 Case structure
+        3.2.2 Subcase structure for cases Set
+    3.3 Merge new case into pure
+
+4, Acknowledgments
+
+-------------------
+
+1, Introduction
+
+1.1 Purpose of this document
+---------------------------------
+
+This document intends to be a high level overview about the design thought, 
+directory structure and project layout in the pure 1.0, which aimed at testing 
+and improving the linux kernel features (especially focused on the part of kernel
+modified by developers, which was not the mainline integrated), the functionality 
+of userspace utility or packages, and the robustness of device drivers on the 
+Linux based on Yocto build system.
+
+The goal of pure is to deliver a test suite which contained a subset of automated 
+testing cases that were accumulated from the experience of the past few years on 
+testing the Linux kernel and BSPs as well as publishing the resultes of tests. The 
+entire testing automation execution on the targets should be controlled by the file
+main_test.sh from the top directory, the execution process would be deployed and 
+implemented by its own processing, without any remote management server.
+
+The pure would not only validate the functionality, but also have coverage from 
+the perspectives on reliability, stability and robustness of Kernel and drivers.
+This testing suite contained a collection of automated and semi-automated cases 
+for testing the kernel feautures and device drivers, all those related features
+which were integrated or ported into the Linux kernel and BSPs.
+
+The dominant programming language in the pure is ANSI-C followed by Bash.
+
+This document has several goals. First, it provides a cursory view of the contents 
+of pure. Second, it introduces a template for writing test-cases in ANSI-C and 
+Shell. Finally, it enumerates the steps that must to be followed inorder to add 
+a new test cases into pure.
+
+1.2 Feedback and corrections
+---------------------------------
+
+In an effort to keep this document current and useful, any form of feedback is 
+greatly appreciated. Feel free to point out any mistakes in this document or 
+contribute additional information. Please e-mail to haotian.zhang@windriver.com, 
+so that these changes can be made available in the next version.
+
+
+2, The overview of contents
+---------------------------------
+
+This section will provide a cursory view of the contents of the pure, and also 
+provide instructions on downloading, compiling and executing the test suite.
+
+2.1 Overview
+------------
+
+The pure test suite would automatically detect the enabled features on the to be 
+tested Linux kernel during the compiling phase, and then generate the feature matrix 
+as the reference for testing execution, after that, the pure would build and install
+the testing cases into the file system, finally make sure the test scope are valid. 
+
+On the runtime phase, all of the testing under the testcases directory, would be
+executed, the results of testing have the following status and corresponding
+representation:
+
+                Test Pass)	pass on the feature testing.
+
+                Test Fail)	fail on the feature testing.
+
+                Untested)	skip the testing due to lack of the necessary 
+				scenario on the board.
+
+                Run Manually) 	the test should be run manually.
+
+		Run Time Out)   the testing can not finish within the stipulated
+				time, so was killed by watch dog.
+
+                Run Exception)  other unexpected return values.
+
+
+
+2.2 Git Repository
+----------------------
+
+The stable version of pure source is released based on the WRLinux development 
+basis. It was maintainted in wrll-runtime-testing layer, master branch.
+
+The layer can be downloaded from
+    git clone git://git/layers/wrll-runtime-testing
+
+To access the default pure Git repository:
+    git.wrs.com/cgi-bin/cgit.cgi/layers/wrll-runtime-testing/tree/pure/recipes-tests/pure/pure-1.0
+
+Browsing the Git tree gives you a great view into the current status of this 
+project's code, also view the complete history of any file in the repository.
+
+2.3 Configuration on the pure
+--------------------------------
+
+To enable the pure in the wrlinux project by the following configuration:
+
+    --with-layer=wrll-runtime-testing/pure
+
+Then, compile the project:
+
+    make -C build pure
+
+The source and binary would be installed in the project build directory:
+
+    $build_path/pure-1.0
+
+Finally, copy the pure in rootfs and boot the target, execute the main_test.sh 
+will start the testing.
+
+    /opt/pure/main_test.sh
+
+
+2.4 Directory structure
+---------------------
+
+Understanding the test structure better might help to understand the preparation
+steps better and therefore, making the whole process smoother. The suite was 
+integrated as a regular user space package into the project.
+
+2.4.1 The pure consists of two main parts:
+	
+	wrll-runtime-testing/pure/recipes-tests/pure
+	|
+	|__pure-1.0/  
+	|	|-- COPYING.GPL
+	|	|-- ChangeLog
+	|	|-- Makefile
+	|	|-- README
+	|	|-- bin
+	|	|-- doc
+	|	|-- gen-test-matrix.sh
+	|	|-- lib
+	|	|-- main_test.sh
+	|	`-- testcases
+	|
+	\__pure_1.0.bb
+
+    * one is the interfaces to kernel build, does most of the work to develop 
+      testing strategy.
+
+      pure_1.0.bb: the bb file for pure to be involved in the Yocto build system.
+                   
+	# defined the depends as bellow:
+
+	DEPENDS = "virtual/kernel rt-tests"
+	RDEPENDS_${PN} += "latencytop oprofile"
+
+	That means, "virtual/kernel" the to be tested linux kernel;
+	            "rt-tests" the package to be involved in the project and the 
+	            cases in the pure would call the programs during the testing;
+	            "latencytop oprofile" as the same as the "rt-tests".
+
+	# inherit the default values from the Yocto build system:
+
+	do_compile() {
+		oe_runmake all   \
+		LINUX_DISTRO=${PREFERRED_PROVIDER_virtual/kernel}  \
+		KERNEL_PATH=${STAGING_KERNEL_DIR}  \
+		BSP_NAME=${MACHINE}
+	}	
+
+
+    * another is the source code folder pure-1.0/,
+      the source code contains a framework and a subset of test cases.
+
+	wrll-runtime-testing/pure/recipes-tests/pure/pure-1.0
+	|
+	|-- Makefile
+	|-- bin
+	|-- gen-test-matrix.sh
+	|-- lib
+	`-- main_test.sh
+
+
+	wrll-runtime-testing/pure/recipes-tests/pure/pure-1.0/testcases
+	|
+	|-- clock_gettime
+	|-- dynamic-tick
+	|-- hrt
+	|-- latencytop
+	|-- mutex_lock
+	|-- perf
+	|-- pi-futex
+	|-- profiling
+	|-- ptrace
+	|-- rb-futex
+	|-- sched_dl
+	`-- unionfs
+
+	wrll-runtime-testing/pure/recipes-tests/pure/pure-1.0/testcases/dynamic-tick/
+	|
+	|-- Makefile
+	|-- dynamic-tick.cfg
+	|-- dynamic-tick.inc
+	|-- dyntick-test.c
+	|-- pmstats-0.3
+	`-- runtest.sh
+
+2.4.2 The typical workflow of pure presents as follows:
+
+     * Consideration on the validation of test scope, the workflow has now been 
+       split into two phases. 
+       
+	1, In the test compling phase, generate the "to be tested" feature matrix
+	   via detecting the meta in of kernel cache. If the feature enabled by 
+	   default, then detect whether there are the cases to test that, if yes, 
+	   compile and install them onto the target.
+
+           
+	   a) the Makefile call the gen-test-matrix.sh and transfer the parameters
+	      of the build system.
+
+	      NOTE: make -e MAKEFLAGS= all LINUX_DISTRO=linux-windriver 
+	            KERNEL_PATH=/home/hzhang/wr-git/qemux86_prj/bitbake_build/tmp/ \
+		    sysroots/qemux86/kernel BSP_NAME=qemux86
+
+	      ****************************************************************
+	      Current LINUX DISTRO: linux-windriver
+	      KMETA PATH: /home/hzhang/wr-git/qemux86_prj/bitbake_build/tmp/ \
+		          sysroots/qemux86/kernel/meta/cfg/scratch
+	      BSP NAME: qemux86
+	      ****************************************************************
+
+  	   b) the gen-test-matrix.sh analyse the file 
+	      $KERNEL_META_PATH/$BSP_NAME-*-meta:
+
+	      LOG of run do_compile:
+
+		----TEST base NO cases
+		----TEST kgdb NO cases
+		----TEST lttng NO cases
+		----TEST blktrace NO cases
+		----TEST systemtap NO cases
+		----TEST utrace NO cases
+		++++TEST hrt enabled
+		----TEST ftrace NO cases
+		++++TEST unionfs enabled
+		----TEST cgroups NO cases
+		----TEST namespaces NO cases
+		----TEST namespaces-experimental NO cases
+		----TEST fuse NO cases
+		----TEST standard NO cases
+		----TEST devtmpfs NO cases
+		----TEST debugfs NO cases
+		----TEST boot-live NO cases
+		----TEST usb-mass-storage NO cases
+		++++TEST latencytop enabled
+		++++TEST profiling enabled
+		----TEST virtio NO cases
+		----TEST netfilter NO cases
+		----TEST sound NO cases
+
+	   c) After hat, a file test_cases.matrix would be generated to pure-1.0/
+	      which record the enabeld kernel features and linux distro information.
+
+	      $ cat pure-1.0/test_cases.matrix 
+	      hrt unionfs latencytop profiling
+	      linux-windriver
+
+	   d) And then, the shell script edit the $test.inc, for example:
+
+	      sed -i s/TEST=.*/TEST=enabled/g testcases/$test/$test.inc
+
+	   e) At the end of "make all", according to the $test.inc file, the variable
+	      of SUBDIRS would be assigned. Each test case contained an inc file, which
+	      provides for the case are going to be "run" or "not run". Some of them
+	      are enabled to be run by default, since that was testing the mainline 
+	      features which were already in the kernel, such as ptrace, ftrace; some 
+	      were enabled by kernel cache development, such as latencytop, hrt 
+	      and unionfs. That was implemented by the following command in the Makefile:
+	      
+	      find testcases/ -maxdepth 2 -name *.inc| xargs grep "TEST=enabled" \
+              | awk -F"/"  '{print $$2}'
+
+	2, In the test runtime phase, the testing execution was controlled by two modules.
+	   one is run_test, another is recording the test results, corresponding the two 
+	   classes, implemented in the file lib/run_test.class and lib/records.class.
+
+	   The main_test.sh under the top dir was the core control file on testing
+	   execution, the main entry for testing:
+
+		doTest ()
+		{
+	        local TEST=$*
+
+	        for TESTRUN in $TEST; do
+        	        cd $TOP_DIR
+                	new RUN_TEST test_run "$TESTRUN"
+	                print_info_begin `test_run.showTYPE` `test_run.showTIMEOUT`
+        	        ./bin/operation_progress.sh $$ `test_run.showTIMEOUT` $TESTRUN &
+               		eval progress_id=`echo $!`
+	                pure.addRecord $TESTRUN "INPROG"
+        	        test_run.startTEST
+                	pstree -p | grep -q $progress_id && kill -9 $progress_id
+	                test_run.checkRST
+        	        updateRecByRst "pure" $TESTRUN `test_run.getTESTRST`
+                	print_info_end
+        	done
+		}
+
+
+	   All of the test cases under testcases/ dir contained a runtest.sh,
+	   that was the interface in test cases with testing suite, see the script:
+
+		RUN_TEST::startTEST()
+		{
+		gotoDIR
+	        initSETUP
+	       	probeCFG
+       	       	[ "$TESTrst" -eq 0 ] && {
+               		./runtest.sh>>$TESTlogfile 2>&1
+		       	TESTrst="$?";
+	       		}
+	       	backtoDIR ../../
+		}
+
+	   The main_test.sh script starts by parsing the parameters and breaking the 
+	   repackTestSet() function call before the do_test() main entry, what all 
+	   have been done is in order to fill the variable TEST.
+	   
+
+2.4.3 It's easier to understand the overall structure diagram:
+
+	Testing Infrastructure 
+	=======================================
+	pure-1.0-r0/pure-1.0$ tree -L 1
+	.
+	├── bin
+	├── ChangeLog
+	├── COPYING.GPL
+	├── doc
+	├── gen-test-matrix.sh
+	├── lib
+	├── main_test.sh
+	├── Makefile
+	├── README
+	├── testcases
+	└── test_cases.matrix
+
+	Runtime Testing on the target
+	=============================
+	/opt/pure$ tree -L 1
+	.
+	├── bin
+	├── lib
+	├── main_test.sh
+	├── testcases
+	└── test_cases.matrix
+
+
+2.5 Pure-1.0 Project Layout
+	
+	wrll-runtime-testing/pure/recipes-tests/pure/pure-1.0
+	.
+	|-- COPYING.GPL
+	|-- ChangeLog
+	|-- Makefile
+	|-- README
+	|-- bin
+	|   |-- Makefile
+	|   `-- operation_progress.sh
+	|-- gen-test-matrix.sh
+	|-- lib
+	|   |-- Makefile
+	|   |-- class.sh
+	|   |-- function.sh
+	|   |-- lib.sh
+	|   |-- records.class
+	|   |-- run_test.class
+	|   `-- testlib.sh
+	|-- main_test.sh
+	`-- testcases
+	    |-- clock_gettime
+	    |   |-- Makefile
+	    |   |-- README
+	    |   |-- clock_gettime.c
+	    |   |-- clock_gettime.inc
+    	    |   `-- runtest.sh
+	    |-- dynamic-tick
+	    |   |-- Makefile
+	    |   |-- dynamic-tick.cfg
+	    |   |-- dynamic-tick.inc
+	    |   |-- dyntick-test.c
+	    |   |-- pmstats-0.3
+	    |   `-- runtest.sh
+	    |-- hrt
+	    |-- latencytop
+	    |-- mutex_lock
+	    |-- perf
+	    |-- pi-futex
+	    |-- profiling
+	    |-- ptrace
+	    |-- rb-futex
+	    |-- sched_dl
+	    `-- unionfs
+
+
